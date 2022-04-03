@@ -100,7 +100,6 @@ def save_model_onnx(model, name):
 def load_model_onnx(path=''):
     import onnxruntime as ort
     onnx_model = ort.InferenceSession(path)
-    print(onnx_model.get_outputs()[1].name)
     return onnx_model
 
 
@@ -114,8 +113,7 @@ def predict_onnx(onnx_model, pic_data):
     pic = pic.reshape((1, 28, 28, 1)).astype(np.float32)
     print("pic shapes:", pic.shape)
     prediction = labels[np.argmax(onnx_model.run(None, {"x": pic}))]
-    probabilities = onnx_model.get_outputs()[1].name
-    print(f"prediction: {prediction}, probabilities: {probabilities}")
+    print(f"prediction: {prediction}")
 
     return prediction
 
