@@ -114,6 +114,7 @@ def predict_onnx(onnx_model, pic_data):
     
     displayPic = cv2.resize(pic, (128, 128), interpolation=cv2.INTER_CUBIC)
     ret, png = cv2.imencode('.png',displayPic)
+    png = cv2.resize(png, (128, 128), interpolation=cv2.INTER_CUBIC)
     png_as_text = base64.b64encode(png).decode('utf-8')
         
     pic = pic.reshape((1, 28, 28, 1)).astype(np.float32)
