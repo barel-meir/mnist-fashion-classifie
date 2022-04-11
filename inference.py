@@ -118,10 +118,13 @@ def predict_onnx(onnx_model, pic_data):
         
     pic = pic.reshape((1, 28, 28, 1)).astype(np.float32)
     print("pic shapes:", pic.shape)
-    prediction = labels[np.argmax(onnx_model.run(None, {"x": pic}))]
+    pred = np.squeeze(onnx_model.run(None, {"x": pic}))
+    index = np.argmax(pred)
+    prediction = labels[index]
+    proba = pred[index]
     print(f"prediction: {prediction}")
 
-    return (png_as_text,prediction,'proba')
+    return (png_as_text,prediction,proba)
 
 
 def save_images_for_testing():
