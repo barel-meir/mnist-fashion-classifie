@@ -10,6 +10,10 @@ import tf2onnx
 import onnx
 import cv2
 import base64
+import wandb
+from wandb.keras import WandbCallback
+# Image Libraries
+from PIL import Image, ImageFilter, ImageStat
 
 X_train, y_train, X_test, y_test = None, None,None, None
 labels = {
@@ -25,22 +29,17 @@ labels = {
     9: 'Ankle boot'}
 
 
-def build_model():
+def build_model(model_type=1):
     '''
     first, lets import the data
     '''
+    global X_train
+    global y_train
+    global X_test
+    global y_test
     (X_train, y_train), (X_test, y_test) = fashion_mnist.load_data()
     print("Train shapes:", X_train.shape)
     print("Test shapes:", X_test.shape)
-
-    '''
-    now lets pre-process the data 
-    first verify the images are B/W 
-    then, reshape the image such that it will have a proper dimension with the B/W value  
-    '''
-    # Normalize the images.
-    X_train = (X_train / 255) - 0.5
-    X_test = (X_test / 255) - 0.5
 
     # Reshape the images.
     X_train = np.expand_dims(X_train, axis=3)
@@ -49,44 +48,65 @@ def build_model():
     print("Train shapes:", X_train.shape)
     print("Test shapes:", X_test.shape)
 
-    '''
-    build the first model: model1.onnx
-    '''
-    model = Sequential()
-    model.add(Conv2D(32, (3, 3), input_shape=(28, 28, 1), padding='same', activation='relu', kernel_initializer='he_uniform'))
-    model.add(MaxPooling2D((2, 2)))
-    model.add(Flatten())
-    model.add(Dense(100, activation='relu', kernel_initializer='he_uniform'))
-    model.add(Dense(10, activation='softmax'))
-    # compile model
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), loss='categorical_crossentropy', metrics=['accuracy'])
-    save_model_onnx(model, "model1")
-    '''
-    build second model: fashion_mnist_model_1e-3LR.onnx
-    '''
-    model = Sequential([
-        Conv2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu', padding='same', kernel_initializer='he_uniform'),
-        MaxPooling2D(pool_size=2),
-        Conv2D(32, (3, 3), activation='relu', padding='same'),
-        MaxPooling2D(pool_size=2),
-        Flatten(),
-        Dense(256, activation='relu'),
-        Dense(128, activation='relu'),
-        Dense(10, activation='softmax')])
+    # Initilize a new wandb run
+    wandb.init(entity="wandb", project="keras-intro", name=f"model{model_type}")
+
+    # Default values for hyper-parameters
+    config = wandb.config  # Config is a variable that holds and saves hyper parameters and inputs
+    config.learning_rate = 0.001
+    config.epochs = 10
+    config.img_width = 28
+    config.img_height = 28
+    config.num_classes = 10
+    config.batch_size = 128
+    config.validation_size = 10000
+    config.weight_decay = 0.0005
+    config.activation = 'relu'
+    config.optimizer = 'adam'
+    config.seed = 42
+
+
+    if model_type == 1:
+        '''
+        build the first model: model1.onnx
+        '''
+        model = Sequential(name='model1')
+        model.add(Conv2D(32, (3, 3), input_shape=(28, 28, 1), padding='same', activation='relu', kernel_initializer='he_uniform'))
+        model.add(MaxPooling2D((2, 2)))
+        model.add(Flatten())
+        model.add(Dense(100, activation='relu', kernel_initializer='he_uniform'))
+        model.add(Dense(10, activation='softmax'))
+    else:
+        '''
+        build second model: fashion_mnist_model_1e-3LR.onnx
+        '''
+        model = Sequential([
+            Conv2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu', padding='same',
+                   kernel_initializer='he_uniform'),
+            MaxPooling2D(pool_size=2),
+            Conv2D(32, (3, 3), activation='relu', padding='same'),
+            MaxPooling2D(pool_size=2),
+            Flatten(),
+            Dense(256, activation='relu'),
+            Dense(128, activation='relu'),
+            Dense(10, activation='softmax')],
+            name='model2')
 
     # compile model
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), loss='categorical_crossentropy',
-                  metrics=['accuracy'])
-    save_model_onnx(model, "fashion_mnist_model_1e-3LR")
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate), loss='categorical_crossentropy', metrics=['accuracy'])
 
-    return model
+    model.fit(X_train, to_categorical(y_train),
+              epochs=config.epochs,
+              batch_size=config.batch_size,
+              validation_data=(X_test, to_categorical(y_test)),
+              verbose=1,
+              callbacks=[
+                  WandbCallback(data_type="image", validation_data=(X_test, to_categorical(y_test)), labels=labels),
+                  tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)]
+              )
 
-
-def fit_model(model):
-    '''
-    fit the model
-    '''
-    history = model.fit(X_train, to_categorical(y_train), epochs=10, batch_size=32, validation_data=(X_test,  to_categorical(y_test)), verbose=1)
+    wandb.finish()
+    return model, model.evaluate(x=X_test, y=to_categorical(y_test))
 
 
 def save_model_onnx(model, name):
@@ -133,14 +153,25 @@ def save_images_for_testing():
 
 
 def main():
-    onnx_model = load_model_onnx(path='models/fashion_mnist_model_1e-3LR.onnx')
-    directory = 'test_images'
-    for filename in os.listdir(directory):
-        f = os.path.join(directory, filename)
-        # checking if it is a file
-        if os.path.isfile(f):
-            print(f"img: {f} ; prediction: {labels[predict_onnx(onnx_model, pic_data=f)]}")
-    cv2.waitKey(-1)
+    model_name = "fashion_mnist_model_1e-3LR"
+    model1, acc1 = build_model(1)
+    model2, acc2 = build_model(2)
+    if acc1[1] > acc2[1]:
+        # save the higher accuracy model
+        save_model_onnx(model1, model_name)
+    else:
+        save_model_onnx(model2, model_name)
+
+    if False:
+        # this is for testing!
+        onnx_model = load_model_onnx(path='models/fashion_mnist_model_1e-3LR.onnx')
+        directory = 'test_images'
+        for filename in os.listdir(directory):
+            f = os.path.join(directory, filename)
+            # checking if it is a file
+            if os.path.isfile(f):
+                print(f"img: {f} ; prediction: {labels[predict_onnx(onnx_model, pic_data=f)]}")
+        cv2.waitKey(-1)
 
 
 if __name__ == '__main__':
