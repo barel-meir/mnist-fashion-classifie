@@ -9,6 +9,7 @@ from keras.datasets import fashion_mnist
 import tf2onnx
 import onnx
 import cv2
+import base64
 
 X_train, y_train, X_test, y_test = None, None,None, None
 labels = {
@@ -110,12 +111,20 @@ def predict_onnx(onnx_model, pic_data):
     #     pic = cv2.cvtColor(pic, cv2.COLOR_BGR2GRAY)
     pic = cv2.resize(pic, (28, 28), interpolation=cv2.INTER_CUBIC)
     # cv2.imshow('pic', pic)
+    
+    displayPic = cv2.resize(pic, (128, 128), interpolation=cv2.INTER_CUBIC)
+    ret, png = cv2.imencode('.png',displayPic)
+    png_as_text = base64.b64encode(png).decode('utf-8')
+        
     pic = pic.reshape((1, 28, 28, 1)).astype(np.float32)
     print("pic shapes:", pic.shape)
-    prediction = labels[np.argmax(onnx_model.run(None, {"x": pic}))]
+    pred = np.squeeze(onnx_model.run(None, {"x": pic}))
+    index = np.argmax(pred)
+    prediction = labels[index]
+    proba = pred[index]
     print(f"prediction: {prediction}")
 
-    return prediction
+    return (png_as_text,prediction,proba)
 
 
 def save_images_for_testing():

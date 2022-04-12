@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, redirect, url_for
-from io import BytesIO
 import numpy as np
 import cv2
 import inference
@@ -11,8 +10,8 @@ inference_model = inference.load_model_onnx(path='models/fashion_mnist_model_1e-
 @app.route('/upload', methods = ['POST'])
 def upload_file():
     filestr = request.files['file'].read()
-    prediction = inference.predict_onnx(inference_model, pic_data=filestr)
-    return render_template('img.html', pic='', label=prediction, prob='prob1')
+    pic,prediction,proba = inference.predict_onnx(inference_model, pic_data=filestr)
+    return render_template('img.html', pic=pic, label=prediction, prob=proba)
 
 
 @app.route('/upload', methods = ['GET'])
@@ -26,5 +25,5 @@ def hello():
 
 
 if __name__ == "__main__":
-     app.run(host='127.0.0.1', port=5678)
+     app.run(host='0.0.0.0', port=5678)
 
