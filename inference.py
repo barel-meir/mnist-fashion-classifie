@@ -12,8 +12,7 @@ import cv2
 import base64
 import wandb
 from wandb.keras import WandbCallback
-# Image Libraries
-from PIL import Image, ImageFilter, ImageStat
+
 
 X_train, y_train, X_test, y_test = None, None,None, None
 labels = {
@@ -30,6 +29,8 @@ labels = {
 
 
 def build_model(model_type=1):
+    # Image Libraries
+    from PIL import Image, ImageFilter, ImageStat
     '''
     first, lets import the data
     '''
